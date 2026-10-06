@@ -30,7 +30,11 @@ export const StatusFilter: React.FC<StatusFilterProps> = ({
 
   return (
     <View style={styles.container}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+      >
         {filters.map((item) => {
           const isSelected = currentFilter === item.key;
           return (

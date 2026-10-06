@@ -23,7 +23,8 @@ export const ProfileScreen: React.FC = () => {
           </View>
           <Text style={styles.title}>Account & Authentication</Text>
           <Text style={styles.description}>
-            Authentication (Firebase Auth), user registration, and personal profiles will be implemented in Practical Exam 2.
+            Authentication (Firebase Auth), user registration, and personal profiles will be
+            implemented in Practical Exam 2.
           </Text>
 
           <View style={styles.cardInfo}>

@@ -22,8 +22,7 @@ import { EmptyState } from '../components/EmptyState';
 import { Ionicons } from '@expo/vector-icons';
 
 export const HomeScreen: React.FC = () => {
-  const { tasks, loading, refreshing, addTask, editTask, removeTask, handleRefresh } =
-    useTasks();
+  const { tasks, loading, refreshing, addTask, editTask, removeTask, handleRefresh } = useTasks();
 
   const [filter, setFilter] = useState<FilterOption>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -110,11 +109,7 @@ export const HomeScreen: React.FC = () => {
         </View>
 
         {/* Status Filter Chips */}
-        <StatusFilter
-          currentFilter={filter}
-          onSelectFilter={setFilter}
-          counts={counts}
-        />
+        <StatusFilter currentFilter={filter} onSelectFilter={setFilter} counts={counts} />
 
         {/* Task List */}
         {loading ? (
@@ -142,8 +137,8 @@ export const HomeScreen: React.FC = () => {
                   searchQuery
                     ? `No tasks matching "${searchQuery}"`
                     : filter !== 'All'
-                    ? `No tasks in "${filter}" status`
-                    : 'No tasks found. Create a new task to get started!'
+                      ? `No tasks in "${filter}" status`
+                      : 'No tasks found. Create a new task to get started!'
                 }
                 onAction={handleOpenCreateModal}
               />

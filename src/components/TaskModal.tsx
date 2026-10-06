@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -22,43 +22,22 @@ interface TaskModalProps {
   initialTask?: Task | null;
 }
 
-export const TaskModal: React.FC<TaskModalProps> = ({
-  visible,
-  onClose,
-  onSubmit,
-  initialTask,
-}) => {
+interface TaskModalFormProps {
+  initialTask?: Task | null;
+  onClose: () => void;
+  onSubmit: (data: CreateTaskInput | UpdateTaskInput) => Promise<void>;
+}
+
+const TaskModalForm: React.FC<TaskModalFormProps> = ({ initialTask, onClose, onSubmit }) => {
   const isEditing = Boolean(initialTask);
 
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<TaskStatus>('To Do');
-  const [priority, setPriority] = useState<TaskPriority>('Medium');
-  const [dueDate, setDueDate] = useState('');
+  const [title, setTitle] = useState(initialTask?.title || '');
+  const [description, setDescription] = useState(initialTask?.description || '');
+  const [status, setStatus] = useState<TaskStatus>(initialTask?.status || 'To Do');
+  const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || 'Medium');
+  const [dueDate, setDueDate] = useState(initialTask?.dueDate || '');
   const [titleError, setTitleError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (initialTask) {
-      setTitle(initialTask.title || '');
-      setDescription(initialTask.description || '');
-      setStatus(initialTask.status || 'To Do');
-      setPriority(initialTask.priority || 'Medium');
-      setDueDate(initialTask.dueDate || '');
-    } else {
-      resetForm();
-    }
-    setTitleError('');
-  }, [initialTask, visible]);
-
-  const resetForm = () => {
-    setTitle('');
-    setDescription('');
-    setStatus('To Do');
-    setPriority('Medium');
-    setDueDate('');
-    setTitleError('');
-  };
 
   const setRelativeDueDate = (daysAhead: number) => {
     const targetDate = new Date();
@@ -85,7 +64,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       });
 
       onClose();
-      resetForm();
     } catch (err: any) {
       console.error('Failed to save task:', err);
     } finally {
@@ -94,182 +72,165 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
+    <View style={styles.modalContent}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.modalTitle}>{isEditing ? 'Edit Task' : 'Create New Task'}</Text>
+        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <Ionicons name="close" size={22} color={COLORS.textDark} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+        {/* Title Field */}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>
+            Title <Text style={styles.requiredMark}>*</Text>
+          </Text>
+          <TextInput
+            style={[styles.input, Boolean(titleError) && styles.inputError]}
+            placeholder="e.g. Design UI Wireframes"
+            placeholderTextColor="#94A3B8"
+            value={title}
+            onChangeText={(text) => {
+              setTitle(text);
+              if (titleError) setTitleError('');
+            }}
+          />
+          {Boolean(titleError) && <Text style={styles.errorText}>{titleError}</Text>}
+        </View>
+
+        {/* Description Field */}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Description (optional)</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Add more details about this task..."
+            placeholderTextColor="#94A3B8"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* Status Selection */}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Status</Text>
+          <View style={styles.optionRow}>
+            {TASK_STATUSES.map((item) => {
+              const isSelected = status === item.value;
+              return (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[styles.optionChip, isSelected && styles.optionChipSelected]}
+                  onPress={() => setStatus(item.value)}
+                >
+                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Priority Selection */}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Priority</Text>
+          <View style={styles.optionRow}>
+            {TASK_PRIORITIES.map((item) => {
+              const isSelected = priority === item.value;
+              return (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[styles.optionChip, isSelected && styles.optionChipSelected]}
+                  onPress={() => setPriority(item.value)}
+                >
+                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Due Date Field */}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Due Date (YYYY-MM-DD)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="2026-10-15"
+            placeholderTextColor="#94A3B8"
+            value={dueDate}
+            onChangeText={setDueDate}
+          />
+          <View style={styles.quickDateRow}>
+            <TouchableOpacity style={styles.quickDateBtn} onPress={() => setRelativeDueDate(0)}>
+              <Text style={styles.quickDateText}>Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.quickDateBtn} onPress={() => setRelativeDueDate(1)}>
+              <Text style={styles.quickDateText}>Tomorrow</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.quickDateBtn} onPress={() => setRelativeDueDate(7)}>
+              <Text style={styles.quickDateText}>In 1 Week</Text>
+            </TouchableOpacity>
+            {Boolean(dueDate) && (
+              <TouchableOpacity
+                style={[styles.quickDateBtn, styles.clearDateBtn]}
+                onPress={() => setDueDate('')}
+              >
+                <Text style={[styles.quickDateText, { color: COLORS.danger }]}>Clear</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Action Buttons */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={submitting}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+          onPress={handleSave}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <Text style={styles.submitText}>{isEditing ? 'Save Changes' : 'Create Task'}</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+export const TaskModal: React.FC<TaskModalProps> = ({
+  visible,
+  onClose,
+  onSubmit,
+  initialTask,
+}) => {
+  return (
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.modalContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.modalTitle}>
-              {isEditing ? 'Edit Task' : 'Create New Task'}
-            </Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={22} color={COLORS.textDark} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-            {/* Title Field */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>
-                Title <Text style={styles.requiredMark}>*</Text>
-              </Text>
-              <TextInput
-                style={[styles.input, Boolean(titleError) && styles.inputError]}
-                placeholder="e.g. Design UI Wireframes"
-                placeholderTextColor="#94A3B8"
-                value={title}
-                onChangeText={(text) => {
-                  setTitle(text);
-                  if (titleError) setTitleError('');
-                }}
-              />
-              {Boolean(titleError) && <Text style={styles.errorText}>{titleError}</Text>}
-            </View>
-
-            {/* Description Field */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Description (optional)</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Add more details about this task..."
-                placeholderTextColor="#94A3B8"
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* Status Selection */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Status</Text>
-              <View style={styles.optionRow}>
-                {TASK_STATUSES.map((item) => {
-                  const isSelected = status === item.value;
-                  return (
-                    <TouchableOpacity
-                      key={item.value}
-                      style={[styles.optionChip, isSelected && styles.optionChipSelected]}
-                      onPress={() => setStatus(item.value)}
-                    >
-                      <Text
-                        style={[
-                          styles.optionText,
-                          isSelected && styles.optionTextSelected,
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Priority Selection */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Priority</Text>
-              <View style={styles.optionRow}>
-                {TASK_PRIORITIES.map((item) => {
-                  const isSelected = priority === item.value;
-                  return (
-                    <TouchableOpacity
-                      key={item.value}
-                      style={[
-                        styles.optionChip,
-                        isSelected && styles.optionChipSelected,
-                      ]}
-                      onPress={() => setPriority(item.value)}
-                    >
-                      <Text
-                        style={[
-                          styles.optionText,
-                          isSelected && styles.optionTextSelected,
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Due Date Field */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Due Date (YYYY-MM-DD)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="2026-10-15"
-                placeholderTextColor="#94A3B8"
-                value={dueDate}
-                onChangeText={setDueDate}
-              />
-              <View style={styles.quickDateRow}>
-                <TouchableOpacity
-                  style={styles.quickDateBtn}
-                  onPress={() => setRelativeDueDate(0)}
-                >
-                  <Text style={styles.quickDateText}>Today</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quickDateBtn}
-                  onPress={() => setRelativeDueDate(1)}
-                >
-                  <Text style={styles.quickDateText}>Tomorrow</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quickDateBtn}
-                  onPress={() => setRelativeDueDate(7)}
-                >
-                  <Text style={styles.quickDateText}>In 1 Week</Text>
-                </TouchableOpacity>
-                {Boolean(dueDate) && (
-                  <TouchableOpacity
-                    style={[styles.quickDateBtn, styles.clearDateBtn]}
-                    onPress={() => setDueDate('')}
-                  >
-                    <Text style={[styles.quickDateText, { color: COLORS.danger }]}>Clear</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </ScrollView>
-
-          {/* Action Buttons */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={onClose}
-              disabled={submitting}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-              onPress={handleSave}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Text style={styles.submitText}>
-                  {isEditing ? 'Save Changes' : 'Create Task'}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+        {visible && (
+          <TaskModalForm
+            key={initialTask ? `edit-${initialTask.id}` : 'create-new'}
+            initialTask={initialTask}
+            onClose={onClose}
+            onSubmit={onSubmit}
+          />
+        )}
       </KeyboardAvoidingView>
     </Modal>
   );

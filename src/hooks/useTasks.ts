@@ -15,7 +15,6 @@ export const useTasks = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
     const unsubscribe = subscribeToTasks(
       (updatedTasks) => {
         setTasks(updatedTasks);

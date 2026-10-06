@@ -23,8 +23,8 @@ export const TeamsScreen: React.FC = () => {
           </View>
           <Text style={styles.title}>Team Workspaces</Text>
           <Text style={styles.description}>
-            Team collaboration and shared workspaces will be introduced in Practical Exam 2.
-            You will be able to invite team members, assign task owners, and track team velocity.
+            Team collaboration and shared workspaces will be introduced in Practical Exam 2. You
+            will be able to invite team members, assign task owners, and track team velocity.
           </Text>
 
           <View style={styles.featureList}>

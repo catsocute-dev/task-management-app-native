@@ -9,7 +9,7 @@ export const COLORS = {
   textMuted: '#64748B', // Slate 500
   border: '#E2E8F0', // Slate 200
   borderLight: '#F1F5F9',
-  
+
   // Status Colors
   statusTodo: '#F59E0B', // Amber
   statusTodoBg: '#FEF3C7',

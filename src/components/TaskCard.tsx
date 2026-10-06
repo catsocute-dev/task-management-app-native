@@ -11,12 +11,7 @@ interface TaskCardProps {
   onToggleStatus?: (task: Task) => void;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({
-  task,
-  onEdit,
-  onDelete,
-  onToggleStatus,
-}) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, onEdit, onDelete, onToggleStatus }) => {
   const getStatusColor = (status: Task['status']) => {
     switch (status) {
       case 'Done':
@@ -40,18 +35,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   };
 
   const handleDeletePress = () => {
-    Alert.alert(
-      'Delete Task',
-      `Are you sure you want to delete "${task.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => onDelete(task.id),
-        },
-      ]
-    );
+    Alert.alert('Delete Task', `Are you sure you want to delete "${task.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => onDelete(task.id),
+      },
+    ]);
   };
 
   const statusColors = getStatusColor(task.status);
@@ -73,10 +64,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         )}
 
         <View style={styles.titleWrapper}>
-          <Text
-            style={[styles.title, isDone && styles.titleDone]}
-            numberOfLines={2}
-          >
+          <Text style={[styles.title, isDone && styles.titleDone]} numberOfLines={2}>
             {task.title}
           </Text>
         </View>
@@ -111,15 +99,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       <View style={styles.footerRow}>
         <View style={styles.badgesGroup}>
           <View style={[styles.badge, { backgroundColor: statusColors.bg }]}>
-            <Text style={[styles.badgeText, { color: statusColors.text }]}>
-              {task.status}
-            </Text>
+            <Text style={[styles.badgeText, { color: statusColors.text }]}>{task.status}</Text>
           </View>
 
           <View style={[styles.badge, { backgroundColor: priorityColors.bg }]}>
-            <Text style={[styles.badgeText, { color: priorityColors.text }]}>
-              {task.priority}
-            </Text>
+            <Text style={[styles.badgeText, { color: priorityColors.text }]}>{task.priority}</Text>
           </View>
         </View>
 
