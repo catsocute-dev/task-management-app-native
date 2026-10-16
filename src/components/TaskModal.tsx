@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,21 +14,35 @@ import {
 import { Task, TaskStatus, TaskPriority, CreateTaskInput, UpdateTaskInput } from '../types/task';
 import { COLORS, TASK_STATUSES, TASK_PRIORITIES } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { Team, TeamMember } from '../types/team';
+import { subscribeUserTeams, getTeamMembers } from '../services/teamService';
 
 interface TaskModalProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (data: CreateTaskInput | UpdateTaskInput) => Promise<void>;
   initialTask?: Task | null;
+  defaultTeamId?: string | null;
+  defaultTeamName?: string | null;
 }
 
 interface TaskModalFormProps {
   initialTask?: Task | null;
+  defaultTeamId?: string | null;
+  defaultTeamName?: string | null;
   onClose: () => void;
   onSubmit: (data: CreateTaskInput | UpdateTaskInput) => Promise<void>;
 }
 
-const TaskModalForm: React.FC<TaskModalFormProps> = ({ initialTask, onClose, onSubmit }) => {
+const TaskModalForm: React.FC<TaskModalFormProps> = ({
+  initialTask,
+  defaultTeamId,
+  defaultTeamName,
+  onClose,
+  onSubmit,
+}) => {
+  const { user } = useAuth();
   const isEditing = Boolean(initialTask);
 
   const [title, setTitle] = useState(initialTask?.title || '');
@@ -36,13 +50,97 @@ const TaskModalForm: React.FC<TaskModalFormProps> = ({ initialTask, onClose, onS
   const [status, setStatus] = useState<TaskStatus>(initialTask?.status || 'To Do');
   const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || 'Medium');
   const [dueDate, setDueDate] = useState(initialTask?.dueDate || '');
+
+  // Team & Assignee state
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
+    initialTask?.teamId || defaultTeamId || null
+  );
+  const [selectedTeamName, setSelectedTeamName] = useState<string | null>(
+    initialTask?.teamName || defaultTeamName || null
+  );
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string | null>(
+    initialTask?.assigneeId || null
+  );
+  const [selectedAssigneeName, setSelectedAssigneeName] = useState<string | null>(
+    initialTask?.assigneeName || null
+  );
+
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+
   const [titleError, setTitleError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Subscribe to user teams
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const unsub = subscribeUserTeams(user.id, (userTeams) => {
+      setTeams(userTeams);
+      if (defaultTeamId) {
+        const found = userTeams.find((t) => t.id === defaultTeamId);
+        if (found) setSelectedTeamName(found.name);
+      }
+    });
+
+    return () => unsub();
+  }, [user?.id, defaultTeamId]);
+
+  // Load team members when team changes
+  useEffect(() => {
+    if (!selectedTeamId) return;
+
+    let isMounted = true;
+
+    getTeamMembers(selectedTeamId)
+      .then((mList) => {
+        if (isMounted) {
+          setMembers(mList);
+          // If editing and assignee matches, keep it
+          if (initialTask?.assigneeId) {
+            const found = mList.find((m) => m.userId === initialTask.assigneeId);
+            if (found) {
+              setSelectedAssigneeName(found.userName || found.userEmail);
+            }
+          }
+        }
+      })
+      .catch((err) => console.error('Error fetching members:', err));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTeamId, initialTask?.assigneeId]);
 
   const setRelativeDueDate = (daysAhead: number) => {
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() + daysAhead);
     setDueDate(targetDate.toISOString().split('T')[0]);
+  };
+
+  const handleSelectTeam = (t: Team | null) => {
+    if (!t) {
+      setSelectedTeamId(null);
+      setSelectedTeamName(null);
+      setSelectedAssigneeId(null);
+      setSelectedAssigneeName(null);
+      setMembers([]);
+    } else {
+      setSelectedTeamId(t.id);
+      setSelectedTeamName(t.name);
+      setSelectedAssigneeId(null);
+      setSelectedAssigneeName(null);
+    }
+  };
+
+  const handleSelectAssignee = (m: TeamMember | null) => {
+    if (!m) {
+      setSelectedAssigneeId(null);
+      setSelectedAssigneeName(null);
+    } else {
+      setSelectedAssigneeId(m.userId);
+      setSelectedAssigneeName(m.userName || m.userEmail);
+    }
   };
 
   const handleSave = async () => {
@@ -61,6 +159,10 @@ const TaskModalForm: React.FC<TaskModalFormProps> = ({ initialTask, onClose, onS
         status,
         priority,
         dueDate: dueDate.trim() || null,
+        teamId: selectedTeamId,
+        teamName: selectedTeamName,
+        assigneeId: selectedAssigneeId,
+        assigneeName: selectedAssigneeName,
       });
 
       onClose();
@@ -114,6 +216,78 @@ const TaskModalForm: React.FC<TaskModalFormProps> = ({ initialTask, onClose, onS
             textAlignVertical="top"
           />
         </View>
+
+        {/* Team Assignment Selector */}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Assign to Team</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            <TouchableOpacity
+              style={[styles.chip, !selectedTeamId && styles.chipSelected]}
+              onPress={() => handleSelectTeam(null)}
+            >
+              <Text style={[styles.chipText, !selectedTeamId && styles.chipTextSelected]}>
+                Personal (No Team)
+              </Text>
+            </TouchableOpacity>
+
+            {teams.map((t) => {
+              const isSelected = selectedTeamId === t.id;
+              return (
+                <TouchableOpacity
+                  key={t.id}
+                  style={[styles.chip, isSelected && styles.chipSelected]}
+                  onPress={() => handleSelectTeam(t)}
+                >
+                  <Ionicons
+                    name="people-outline"
+                    size={14}
+                    color={isSelected ? COLORS.primary : COLORS.textMuted}
+                  />
+                  <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                    {t.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Assignee Member Selector (shown when team is selected) */}
+        {Boolean(selectedTeamId) && (
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Team Assignee</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              <TouchableOpacity
+                style={[styles.chip, !selectedAssigneeId && styles.chipSelected]}
+                onPress={() => handleSelectAssignee(null)}
+              >
+                  <Text style={[styles.chipText, !selectedAssigneeId && styles.chipTextSelected]}>
+                    Unassigned
+                  </Text>
+                </TouchableOpacity>
+
+                {members.map((m) => {
+                  const isSelected = selectedAssigneeId === m.userId;
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={[styles.chip, isSelected && styles.chipSelected]}
+                      onPress={() => handleSelectAssignee(m)}
+                    >
+                      <Ionicons
+                        name="person-circle-outline"
+                        size={15}
+                        color={isSelected ? COLORS.primary : COLORS.textMuted}
+                      />
+                      <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                        {m.userName || m.userEmail}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+          </View>
+        )}
 
         {/* Status Selection */}
         <View style={styles.formGroup}>
@@ -216,6 +390,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onClose,
   onSubmit,
   initialTask,
+  defaultTeamId,
+  defaultTeamName,
 }) => {
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
@@ -227,6 +403,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           <TaskModalForm
             key={initialTask ? `edit-${initialTask.id}` : 'create-new'}
             initialTask={initialTask}
+            defaultTeamId={defaultTeamId}
+            defaultTeamName={defaultTeamName}
             onClose={onClose}
             onSubmit={onSubmit}
           />
@@ -305,13 +483,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
   },
   textArea: {
-    minHeight: 80,
+    minHeight: 70,
   },
   errorText: {
     color: COLORS.danger,
     fontSize: 12,
     marginTop: 4,
     fontWeight: '500',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: '#FAFAFA',
+    gap: 6,
+  },
+  chipSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  chipTextSelected: {
+    color: COLORS.primary,
   },
   optionRow: {
     flexDirection: 'row',

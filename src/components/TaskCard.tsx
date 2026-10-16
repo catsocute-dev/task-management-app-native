@@ -95,6 +95,29 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onEdit, onDelete, onTo
         </Text>
       )}
 
+      {/* Team & Assignee Meta Row */}
+      {(Boolean(task.teamName) || Boolean(task.assigneeName)) && (
+        <View style={styles.metaRow}>
+          {Boolean(task.teamName) && (
+            <View style={styles.teamTag}>
+              <Ionicons name="people" size={12} color={COLORS.primary} />
+              <Text style={styles.teamTagText} numberOfLines={1}>
+                {task.teamName}
+              </Text>
+            </View>
+          )}
+
+          {Boolean(task.assigneeName) && (
+            <View style={styles.assigneeTag}>
+              <Ionicons name="person-circle-outline" size={13} color="#475569" />
+              <Text style={styles.assigneeTagText} numberOfLines={1}>
+                {task.assigneeName}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Badges & Due Date footer */}
       <View style={styles.footerRow}>
         <View style={styles.badgesGroup}>
@@ -191,11 +214,46 @@ const styles = StyleSheet.create({
   descriptionDone: {
     color: '#94A3B8',
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  teamTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  teamTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  assigneeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  assigneeTagText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#334155',
+  },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 14,
+    marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,

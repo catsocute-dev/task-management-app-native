@@ -8,6 +8,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
@@ -19,36 +20,29 @@ const TASKS_COLLECTION = 'tasks';
 let localMockTasks: Task[] = [
   {
     id: 'sample-task-1',
-    title: 'Set up Firebase Firestore',
-    description: 'Create a Firebase project and connect it using credentials in .env',
+    title: 'Set up Firebase Firestore & Authentication',
+    description: 'Ensure user registration and auth persistence work smoothly.',
     status: 'In Progress',
     priority: 'High',
     dueDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
     createdAt: new Date().toISOString(),
-    teamId: null,
-    assigneeId: null,
+    teamId: 'mock-team-alpha',
+    teamName: 'Mobile Engineering',
+    assigneeId: 'mock-user-1',
+    assigneeName: 'Lead Engineer',
   },
   {
     id: 'sample-task-2',
-    title: 'Review Data Model Requirements',
-    description: 'Ensure all required fields (title, status, priority, dueDate) are documented',
+    title: 'Implement Real-Time Team Chat',
+    description: 'Hook Firestore onSnapshot to messages subcollection per team.',
     status: 'Done',
-    priority: 'Medium',
+    priority: 'High',
     dueDate: new Date().toISOString().split('T')[0],
     createdAt: new Date(Date.now() - 86400000).toISOString(),
-    teamId: null,
-    assigneeId: null,
-  },
-  {
-    id: 'sample-task-3',
-    title: 'Prepare Practical Exam 1 Report',
-    description: 'Take screenshots of CRUD operations and write summary documentation',
-    status: 'To Do',
-    priority: 'High',
-    dueDate: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
-    createdAt: new Date().toISOString(),
-    teamId: null,
-    assigneeId: null,
+    teamId: 'mock-team-alpha',
+    teamName: 'Mobile Engineering',
+    assigneeId: 'mock-user-2',
+    assigneeName: 'Alice Johnson',
   },
 ];
 
@@ -59,16 +53,31 @@ const notifyMockListeners = () => {
   mockListeners.forEach((listener) => listener(tasksCopy));
 };
 
+const mapDocToTask = (docSnap: any): Task => {
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    title: data.title || '',
+    description: data.description || '',
+    status: data.status || 'To Do',
+    priority: data.priority || 'Medium',
+    dueDate: data.dueDate || null,
+    createdAt: data.createdAt || new Date().toISOString(),
+    teamId: data.teamId ?? null,
+    teamName: data.teamName ?? null,
+    assigneeId: data.assigneeId ?? null,
+    assigneeName: data.assigneeName ?? null,
+  };
+};
+
 /**
- * Subscribe to real-time updates for tasks from Cloud Firestore.
- * Falls back to local in-memory store if Firebase is not yet configured.
+ * Subscribe to real-time updates for all tasks from Cloud Firestore.
  */
 export const subscribeToTasks = (
   onNext: (tasks: Task[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe => {
   if (!isFirebaseConfigured() || !db) {
-    // Notify immediately with mock data
     onNext([...localMockTasks]);
     mockListeners.push(onNext);
     return () => {
@@ -84,20 +93,7 @@ export const subscribeToTasks = (
     return onSnapshot(
       q,
       (snapshot) => {
-        const tasks: Task[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            title: data.title || '',
-            description: data.description || '',
-            status: data.status || 'To Do',
-            priority: data.priority || 'Medium',
-            dueDate: data.dueDate || null,
-            createdAt: data.createdAt || new Date().toISOString(),
-            teamId: data.teamId ?? null,
-            assigneeId: data.assigneeId ?? null,
-          };
-        });
+        const tasks: Task[] = snapshot.docs.map(mapDocToTask);
         onNext(tasks);
       },
       (error) => {
@@ -113,6 +109,28 @@ export const subscribeToTasks = (
 };
 
 /**
+ * Fetch tasks for a specific team.
+ */
+export const fetchTasksByTeam = async (teamId: string): Promise<Task[]> => {
+  if (!isFirebaseConfigured() || !db) {
+    return localMockTasks.filter((t) => t.teamId === teamId);
+  }
+
+  try {
+    const tasksRef = collection(db, TASKS_COLLECTION);
+    const q = query(tasksRef, where('teamId', '==', teamId));
+    const snapshot = await getDocs(q);
+    const tasks = snapshot.docs.map(mapDocToTask);
+    return tasks.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  } catch (err) {
+    console.error('Error fetching team tasks:', err);
+    return [];
+  }
+};
+
+/**
  * Fetch all tasks once (manual fetch / pull-to-refresh).
  */
 export const fetchTasks = async (): Promise<Task[]> => {
@@ -124,20 +142,7 @@ export const fetchTasks = async (): Promise<Task[]> => {
   const q = query(tasksRef, orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      title: data.title || '',
-      description: data.description || '',
-      status: data.status || 'To Do',
-      priority: data.priority || 'Medium',
-      dueDate: data.dueDate || null,
-      createdAt: data.createdAt || new Date().toISOString(),
-      teamId: data.teamId ?? null,
-      assigneeId: data.assigneeId ?? null,
-    };
-  });
+  return snapshot.docs.map(mapDocToTask);
 };
 
 /**
@@ -152,7 +157,9 @@ export const createTask = async (input: CreateTaskInput): Promise<string> => {
     dueDate: input.dueDate || null,
     createdAt: input.createdAt || new Date().toISOString(),
     teamId: input.teamId ?? null,
+    teamName: input.teamName ?? null,
     assigneeId: input.assigneeId ?? null,
+    assigneeName: input.assigneeName ?? null,
   };
 
   if (!isFirebaseConfigured() || !db) {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,10 @@ import {
   StatusBar,
 } from 'react-native';
 import { useTasks } from '../hooks/useTasks';
+import { useAuth } from '../context/AuthContext';
 import { Task, CreateTaskInput, UpdateTaskInput } from '../types/task';
+import { Team } from '../types/team';
+import { subscribeUserTeams } from '../services/teamService';
 import { COLORS } from '../constants/theme';
 import { Header } from '../components/Header';
 import { TaskCard } from '../components/TaskCard';
@@ -22,33 +25,58 @@ import { EmptyState } from '../components/EmptyState';
 import { Ionicons } from '@expo/vector-icons';
 
 export const HomeScreen: React.FC = () => {
+  const { user } = useAuth();
   const { tasks, loading, refreshing, addTask, editTask, removeTask, handleRefresh } = useTasks();
 
+  const [userTeams, setUserTeams] = useState<Team[]>([]);
   const [filter, setFilter] = useState<FilterOption>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  // Compute status counts
+  // Subscribe to user teams to filter tasks
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const unsub = subscribeUserTeams(user.id, (teams) => {
+      setUserTeams(teams);
+    });
+
+    return () => unsub();
+  }, [user?.id]);
+
+  const userTeamIds = useMemo(() => userTeams.map((t) => t.id), [userTeams]);
+
+  // Tasks belonging to user's teams or personal/unassigned to team
+  const relevantTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      if (!task.teamId) return true;
+      return userTeamIds.includes(task.teamId);
+    });
+  }, [tasks, userTeamIds]);
+
+  // Compute status counts for relevant tasks
   const counts = useMemo(() => {
     return {
-      all: tasks.length,
-      todo: tasks.filter((t) => t.status === 'To Do').length,
-      inProgress: tasks.filter((t) => t.status === 'In Progress').length,
-      done: tasks.filter((t) => t.status === 'Done').length,
+      all: relevantTasks.length,
+      todo: relevantTasks.filter((t) => t.status === 'To Do').length,
+      inProgress: relevantTasks.filter((t) => t.status === 'In Progress').length,
+      done: relevantTasks.filter((t) => t.status === 'Done').length,
     };
-  }, [tasks]);
+  }, [relevantTasks]);
 
   // Filter & search tasks
   const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    return relevantTasks.filter((task) => {
       const matchesStatus = filter === 'All' || task.status === filter;
       const matchesQuery =
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.description.toLowerCase().includes(searchQuery.toLowerCase());
+        task.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (task.assigneeName && task.assigneeName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (task.teamName && task.teamName.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesStatus && matchesQuery;
     });
-  }, [tasks, filter, searchQuery]);
+  }, [relevantTasks, filter, searchQuery]);
 
   const handleOpenCreateModal = () => {
     setSelectedTask(null);
@@ -86,7 +114,7 @@ export const HomeScreen: React.FC = () => {
             <Ionicons name="search-outline" size={18} color={COLORS.textMuted} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search tasks..."
+              placeholder="Search by title, team, assignee..."
               placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
