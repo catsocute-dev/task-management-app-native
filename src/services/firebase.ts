@@ -1,5 +1,14 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
+// In React Native environment, initializeAuth supports getReactNativePersistence
+import {
+  initializeAuth,
+  getAuth,
+  Auth,
+  // @ts-ignore getReactNativePersistence is available in the react-native entrypoint of @firebase/auth
+  getReactNativePersistence,
+} from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '',
@@ -22,11 +31,20 @@ export const isFirebaseConfigured = (): boolean => {
 
 let app: FirebaseApp;
 let db: Firestore | null = null;
+let auth: Auth | null = null;
 
 if (isFirebaseConfigured()) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
+
+    try {
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+    } catch {
+      auth = getAuth(app);
+    }
   } catch (error) {
     console.error('Error initializing Firebase:', error);
   }
@@ -36,4 +54,4 @@ if (isFirebaseConfigured()) {
   );
 }
 
-export { app, db };
+export { app, db, auth };
