@@ -35,6 +35,13 @@
 ### 5. Production Security Rules
 - Protected Firestore Security Rules enforcing `request.auth != null` for read and write operations across all collections.
 
+### 🌟 Bonus & Optional Features (Completed)
+- **Google Sign-In**: Alternative authentication provider via OAuth 2.0 with custom Google sign-in button and fallback demo mode.
+- **Profile Picture & Cloudinary Media**: Camera roll image picker via `expo-image-picker`, automated upload to Cloudinary CDN (Free tier, no credit card required), profile updating in Firestore, and display of avatars in Profile and alongside chat messages.
+- **Typing Indicator & Online Status**: Real-time broadcast and debounced listener for typing members in `teams/{teamId}/typing`, with animated dots in chat and status in header.
+- **Push & Local Notifications**: Automated notifications via `expo-notifications` whenever a task is assigned to an assignee and when team messages are dispatched.
+- **Complete ERD & Data Dictionary**: Exhaustive Mermaid diagram and schema table documenting all collections, subcollections, relations, foreign keys, and fields.
+
 ---
 
 ## 📊 Database Schema & ERD (Entity Relationship Diagram)
@@ -44,24 +51,28 @@ erDiagram
     USERS ||--o{ TEAM_MEMBERS : "joins"
     TEAMS ||--o{ TEAM_MEMBERS : "has"
     TEAMS ||--o{ TASKS : "contains"
-    TEAMS ||--o{ MESSAGES : "hosts"
+    TEAMS ||--o{ MESSAGES : "hosts (subcollection)"
+    TEAMS ||--o{ TYPING : "tracks (subcollection)"
     USERS ||--o{ TASKS : "assigned to"
     USERS ||--o{ MESSAGES : "sends"
+    USERS ||--o{ TYPING : "broadcasts"
 
     USERS {
         string id PK "Firebase Auth UID"
         string name "Full Name"
         string email "Email Address"
-        string avatarUrl "Profile Picture URL"
+        string avatarUrl "Profile Picture URL (Cloudinary CDN)"
+        string pushToken "Expo Push Token for notifications"
+        string lastSeen "ISO Timestamp of last activity"
         string createdAt "ISO Timestamp"
     }
 
     TEAMS {
         string id PK "Auto Document ID"
-        string name "Team Name"
-        string description "Team Purpose"
-        string ownerId "Creator UID"
-        string code "6-character invite code"
+        string name "Team Workspace Name"
+        string description "Team Purpose / Description"
+        string ownerId "Creator Firebase UID"
+        string code "6-character unique invite code"
         string createdAt "ISO Timestamp"
     }
 
@@ -70,33 +81,53 @@ erDiagram
         string teamId FK "Reference to teams.id"
         string userId FK "Reference to users.id"
         string role "owner | admin | member"
-        string userName "Cached User Name"
-        string userEmail "Cached User Email"
+        string userName "Cached User Display Name"
+        string userEmail "Cached User Email Address"
         string joinedAt "ISO Timestamp"
     }
 
     TASKS {
         string id PK "Auto Document ID"
         string title "Task Title"
-        string description "Task Description"
+        string description "Task Details"
         string status "To Do | In Progress | Done"
         string priority "Low | Medium | High"
-        string dueDate "YYYY-MM-DD"
-        string teamId FK "Reference to teams.id"
+        string dueDate "Due Date (YYYY-MM-DD)"
+        string teamId FK "Reference to teams.id (optional)"
         string teamName "Cached Team Name"
-        string assigneeId FK "Reference to users.id"
+        string assigneeId FK "Reference to users.id (optional)"
         string assigneeName "Cached Assignee Name"
         string createdAt "ISO Timestamp"
     }
 
     MESSAGES {
-        string id PK "Auto Document ID (subcollection)"
+        string id PK "Auto Document ID (teams/{teamId}/messages)"
         string senderId FK "Reference to users.id"
         string senderName "Sender Display Name"
-        string text "Message Body"
+        string senderAvatarUrl "Sender Avatar Image URL"
+        string text "Message Body Content"
         string createdAt "ISO Timestamp"
     }
+
+    TYPING {
+        string userId PK "Document ID = User ID (teams/{teamId}/typing)"
+        string userName "User Display Name"
+        boolean isTyping "Typing Flag"
+        string updatedAt "ISO Timestamp (debounced)"
+    }
 ```
+
+### 📋 Firestore Collections & Data Dictionary
+
+| Collection / Subcollection | Path | Key Fields & Types | Purpose & Description |
+|:---|:---|:---|:---|
+| **users** | `/users/{userId}` | `id` (string), `name` (string), `email` (string), `avatarUrl` (string?), `pushToken` (string?), `lastSeen` (string?), `createdAt` (string) | Stores user identity, Cloudinary CDN avatar URL, Expo push token, and online activity status. |
+| **teams** | `/teams/{teamId}` | `id` (string), `name` (string), `description` (string), `ownerId` (string), `code` (string), `createdAt` (string) | Team workspaces and collaboration hubs with 6-char invite codes. |
+| **teamMembers** | `/teamMembers/{memberId}` | `id` (string), `teamId` (string), `userId` (string), `role` (string), `userName` (string), `userEmail` (string), `joinedAt` (string) | Relational mapping connecting users to teams with roles (`owner`, `admin`, `member`). |
+| **tasks** | `/tasks/{taskId}` | `id` (string), `title` (string), `description` (string), `status` (string), `priority` (string), `dueDate` (string?), `teamId` (string?), `assigneeId` (string?), `createdAt` (string) | Collaborative task tracking with team association and member assignment. |
+| **messages** | `/teams/{teamId}/messages/{messageId}` | `id` (string), `senderId` (string), `senderName` (string), `senderAvatarUrl` (string?), `text` (string), `createdAt` (string) | Real-time chat stream with Firestore `onSnapshot` listeners and sender profile avatars. |
+| **typing** | `/teams/{teamId}/typing/{userId}` | `userId` (string), `userName` (string), `isTyping` (boolean), `updatedAt` (string) | Ephemeral real-time typing indicator broadcast across team members. |
+
 
 ---
 

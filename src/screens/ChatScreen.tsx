@@ -10,12 +10,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { ChatMessage } from '../types/chat';
-import { subscribeToTeamMessages, sendTeamMessage } from '../services/chatService';
+import {
+  subscribeToTeamMessages,
+  sendTeamMessage,
+  setUserTypingStatus,
+  subscribeToTeamTyping,
+} from '../services/chatService';
 
 interface ChatScreenProps {
   route: any;
@@ -30,8 +36,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route, navigation }) => 
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Subscribe to real-time chat messages
   useEffect(() => {
@@ -50,14 +58,44 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route, navigation }) => 
     return () => unsubscribe();
   }, [teamId]);
 
-  // Scroll to bottom when new messages arrive
+  // Subscribe to real-time typing indicators
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const unsubscribeTyping = subscribeToTeamTyping(teamId, user.id, (users) => {
+      setTypingUsers(users);
+    });
+
+    return () => {
+      unsubscribeTyping();
+      setUserTypingStatus(teamId, { id: user.id, name: user.name || 'User' }, false);
+    };
+  }, [teamId, user]);
+
+  // Scroll to bottom when new messages arrive or someone is typing
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages.length]);
+  }, [messages.length, typingUsers.length]);
+
+  const handleTextChange = (text: string) => {
+    setInputText(text);
+
+    if (user?.id) {
+      setUserTypingStatus(teamId, { id: user.id, name: user.name || 'User' }, true);
+
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+      }
+
+      typingTimerRef.current = setTimeout(() => {
+        setUserTypingStatus(teamId, { id: user.id, name: user.name || 'User' }, false);
+      }, 2500);
+    }
+  };
 
   const handleSend = async () => {
     const text = inputText.trim();
@@ -66,10 +104,17 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route, navigation }) => 
     try {
       setSending(true);
       setInputText('');
+
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+      }
+      setUserTypingStatus(teamId, { id: user.id, name: user.name || 'User' }, false);
+
       await sendTeamMessage({
         teamId,
         senderId: user.id,
         senderName: user.name || user.email.split('@')[0],
+        senderAvatarUrl: user.avatarUrl || null,
         text,
       });
     } catch (err) {
@@ -120,8 +165,17 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route, navigation }) => 
               {teamName}
             </Text>
             <View style={styles.statusIndicator}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>Team Real-Time Chat</Text>
+              <View
+                style={[
+                  styles.statusDot,
+                  typingUsers.length > 0 && styles.statusDotTyping,
+                ]}
+              />
+              <Text style={styles.statusText}>
+                {typingUsers.length > 0
+                  ? `${typingUsers[0]} is typing...`
+                  : 'Real-Time Active'}
+              </Text>
             </View>
           </View>
 
@@ -162,7 +216,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route, navigation }) => 
                 <View style={[styles.messageRow, isMine ? styles.myRow : styles.otherRow]}>
                   {!isMine && (
                     <View style={styles.senderAvatar}>
-                      <Text style={styles.avatarLetter}>{getInitials(item.senderName)}</Text>
+                      {item.senderAvatarUrl ? (
+                        <Image source={{ uri: item.senderAvatarUrl }} style={styles.avatarImg} />
+                      ) : (
+                        <Text style={styles.avatarLetter}>{getInitials(item.senderName)}</Text>
+                      )}
                     </View>
                   )}
 
@@ -181,10 +239,36 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route, navigation }) => 
                       {formatTime(item.createdAt)}
                     </Text>
                   </View>
+
+                  {isMine && (
+                    <View style={styles.myAvatar}>
+                      {user?.avatarUrl ? (
+                        <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
+                      ) : (
+                        <Text style={styles.avatarLetterWhite}>{getInitials(user?.name)}</Text>
+                      )}
+                    </View>
+                  )}
                 </View>
               );
             }}
           />
+        )}
+
+        {/* Real-time Typing Indicator Bar */}
+        {typingUsers.length > 0 && (
+          <View style={styles.typingContainer}>
+            <View style={styles.typingDotsRow}>
+              <View style={styles.smallDot} />
+              <View style={styles.smallDot} />
+              <View style={styles.smallDot} />
+            </View>
+            <Text style={styles.typingLabel}>
+              {typingUsers.length === 1
+                ? `${typingUsers[0]} is typing...`
+                : `${typingUsers.join(', ')} are typing...`}
+            </Text>
+          </View>
         )}
 
         {/* Bottom Message Input Bar */}
@@ -194,7 +278,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route, navigation }) => 
             placeholder="Type a message..."
             placeholderTextColor="#94A3B8"
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleTextChange}
             multiline
             maxLength={1000}
           />
@@ -264,6 +348,9 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: COLORS.success,
+  },
+  statusDotTyping: {
+    backgroundColor: '#F59E0B',
   },
   statusText: {
     fontSize: 11,
@@ -339,11 +426,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
+    overflow: 'hidden',
+  },
+  myAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   avatarLetter: {
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.primary,
+  },
+  avatarLetterWhite: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  typingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    gap: 8,
+  },
+  typingDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  smallDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: COLORS.primary,
+  },
+  typingLabel: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: COLORS.textMuted,
   },
   bubble: {
     maxWidth: '78%',

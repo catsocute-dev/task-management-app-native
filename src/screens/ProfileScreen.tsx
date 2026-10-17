@@ -9,15 +9,18 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../constants/theme';
 import { Header } from '../components/Header';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 
 export const ProfileScreen: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateAvatar } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const getInitials = (name?: string) => {
     if (!name) return 'U';
@@ -27,6 +30,38 @@ export const ProfileScreen: React.FC = () => {
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  const handlePickAvatar = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Camera roll permission is required to select a profile picture.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedUri = result.assets[0].uri;
+        setUploadingAvatar(true);
+        await updateAvatar(selectedUri);
+        Alert.alert('Success', 'Profile picture updated successfully!');
+      }
+    } catch (err: any) {
+      console.error('Error selecting avatar:', err);
+      Alert.alert('Upload Failed', err?.message || 'Could not upload profile picture.');
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   const handleLogout = () => {
@@ -69,17 +104,50 @@ export const ProfileScreen: React.FC = () => {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Avatar and Primary Identity */}
           <View style={styles.avatarContainer}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>{getInitials(user?.name)}</Text>
+            <View style={styles.avatarWrapper}>
+              <TouchableOpacity
+                onPress={handlePickAvatar}
+                disabled={uploadingAvatar}
+                activeOpacity={0.8}
+                style={styles.avatarCircle}
+              >
+                {user?.avatarUrl ? (
+                  <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarInitials}>{getInitials(user?.name)}</Text>
+                )}
+
+                {uploadingAvatar && (
+                  <View style={styles.avatarLoadingOverlay}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cameraBadge}
+                onPress={handlePickAvatar}
+                disabled={uploadingAvatar}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="camera" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
+
             <Text style={styles.userName}>{user?.name || 'Anonymous User'}</Text>
             <Text style={styles.userEmail}>{user?.email || 'No email attached'}</Text>
+            <TouchableOpacity onPress={handlePickAvatar} style={styles.changePhotoBtn}>
+              <Text style={styles.changePhotoBtnText}>
+                {uploadingAvatar ? 'Uploading to Firebase...' : 'Change Profile Picture'}
+              </Text>
+            </TouchableOpacity>
 
             <View style={styles.statusBadge}>
               <View style={styles.statusDot} />
               <Text style={styles.statusBadgeText}>Authenticated</Text>
             </View>
           </View>
+
 
           {/* Account Details Card */}
           <View style={styles.cardInfo}>
@@ -139,9 +207,9 @@ export const ProfileScreen: React.FC = () => {
             <View style={styles.row}>
               <View style={styles.rowLabelContainer}>
                 <Ionicons name="cloud-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.rowLabel}>Cloud Storage</Text>
+                <Text style={styles.rowLabel}>Media Storage</Text>
               </View>
-              <Text style={styles.rowValue}>Cloud Firestore</Text>
+              <Text style={styles.rowValue}>Cloudinary (CDN)</Text>
             </View>
           </View>
 
@@ -187,22 +255,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 20,
   },
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: 12,
+  },
   avatarCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    overflow: 'hidden',
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
+  avatarImage: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+  },
+  avatarLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.primary,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
   avatarInitials: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '800',
     color: '#FFFFFF',
   },
@@ -214,7 +319,17 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 13,
     color: COLORS.textMuted,
-    marginTop: 4,
+    marginTop: 3,
+  },
+  changePhotoBtn: {
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  changePhotoBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   statusBadge: {
     flexDirection: 'row',

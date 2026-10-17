@@ -3,6 +3,8 @@ export interface UserProfile {
   name: string;
   email: string;
   avatarUrl?: string | null;
+  pushToken?: string | null;
+  lastSeen?: string | null;
   createdAt: string;
 }
 

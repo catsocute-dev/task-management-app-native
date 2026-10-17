@@ -13,6 +13,8 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
 import { Task, CreateTaskInput, UpdateTaskInput } from '../types/task';
+import { sendLocalNotification, sendPushNotification } from './notificationService';
+import { getUserProfile } from './authService';
 
 const TASKS_COLLECTION = 'tasks';
 
@@ -170,11 +172,40 @@ export const createTask = async (input: CreateTaskInput): Promise<string> => {
     };
     localMockTasks = [created, ...localMockTasks];
     notifyMockListeners();
+
+    if (input.assigneeName) {
+      sendLocalNotification(
+        '📋 New Task Assignment',
+        `Task "${input.title}" assigned to ${input.assigneeName}`,
+        { taskId: mockId }
+      );
+    }
     return mockId;
   }
 
   const tasksRef = collection(db, TASKS_COLLECTION);
   const docRef = await addDoc(tasksRef, newTaskData);
+
+  // Send push notification if task has an assignee
+  if (input.assigneeId) {
+    getUserProfile(input.assigneeId).then((profile) => {
+      if (profile?.pushToken) {
+        sendPushNotification(
+          profile.pushToken,
+          '📋 New Task Assigned',
+          `You have been assigned to: ${input.title}`,
+          { taskId: docRef.id }
+        );
+      }
+    }).catch(() => {});
+
+    sendLocalNotification(
+      '📋 Task Assigned',
+      `"${input.title}" assigned to ${input.assigneeName || 'team member'}`,
+      { taskId: docRef.id }
+    );
+  }
+
   return docRef.id;
 };
 
@@ -185,6 +216,14 @@ export const updateTask = async (id: string, input: UpdateTaskInput): Promise<vo
   if (!isFirebaseConfigured() || !db) {
     localMockTasks = localMockTasks.map((t) => (t.id === id ? { ...t, ...input } : t));
     notifyMockListeners();
+
+    if (input.assigneeName) {
+      sendLocalNotification(
+        '📋 Task Assignment Updated',
+        `Task assigned to ${input.assigneeName}`,
+        { taskId: id }
+      );
+    }
     return;
   }
 
@@ -192,6 +231,19 @@ export const updateTask = async (id: string, input: UpdateTaskInput): Promise<vo
   await updateDoc(docRef, {
     ...input,
   });
+
+  if (input.assigneeId) {
+    getUserProfile(input.assigneeId).then((profile) => {
+      if (profile?.pushToken) {
+        sendPushNotification(
+          profile.pushToken,
+          '📋 Task Assignment Updated',
+          `Task assigned to you: ${input.title || 'Updated Task'}`,
+          { taskId: id }
+        );
+      }
+    }).catch(() => {});
+  }
 };
 
 /**

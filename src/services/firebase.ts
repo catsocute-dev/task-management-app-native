@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 // In React Native environment, initializeAuth supports getReactNativePersistence
 import {
   initializeAuth,
@@ -32,11 +33,17 @@ export const isFirebaseConfigured = (): boolean => {
 let app: FirebaseApp;
 let db: Firestore | null = null;
 let auth: Auth | null = null;
+let storage: FirebaseStorage | null = null;
 
 if (isFirebaseConfigured()) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
+    try {
+      storage = getStorage(app);
+    } catch (storageErr) {
+      console.warn('Firebase Storage initialization error:', storageErr);
+    }
 
     try {
       auth = initializeAuth(app, {
@@ -54,4 +61,4 @@ if (isFirebaseConfigured()) {
   );
 }
 
-export { app, db, auth };
+export { app, db, auth, storage };

@@ -13,13 +13,17 @@ service cloud.firestore {
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Teams collection and nested real-time chat messages
+    // Teams collection, nested real-time chat messages, and typing indicators
     match /teams/{teamId} {
       allow read, write: if isAuthenticated();
 
       match /messages/{messageId} {
         allow read, create: if isAuthenticated();
         allow update, delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      }
+
+      match /typing/{userId} {
+        allow read, write: if isAuthenticated();
       }
     }
 

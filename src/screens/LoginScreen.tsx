@@ -10,23 +10,98 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../constants/theme';
+
+WebBrowser.maybeCompleteAuthSession();
 
 interface LoginScreenProps {
   navigation: any;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const redirectUri = AuthSession.makeRedirectUri({
+    scheme: 'taskmaster',
+  });
+
+  const handleGoogleSignIn = async () => {
+    const clientId =
+      Platform.select({
+        ios: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+        android: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+        default: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      }) || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
+    // Check if Google Client ID is configured
+    if (!clientId || clientId.includes('your_google')) {
+      Alert.alert(
+        'Google Sign-In',
+        'Google OAuth Client ID is not yet set in .env. Would you like to sign in with a demo Google Account?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign in with Demo Google',
+            onPress: async () => {
+              try {
+                setGoogleLoading(true);
+                setErrorMessage('');
+                await loginWithGoogle('demo-id-token');
+              } catch (err: any) {
+                setErrorMessage(err.message || 'Google sign-in failed');
+              } finally {
+                setGoogleLoading(false);
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    try {
+      setGoogleLoading(true);
+      setErrorMessage('');
+
+      const discovery = {
+        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+        tokenEndpoint: 'https://oauth2.googleapis.com/token',
+      };
+
+      const request = new AuthSession.AuthRequest({
+        clientId,
+        scopes: ['openid', 'profile', 'email'],
+        responseType: AuthSession.ResponseType.IdToken,
+        redirectUri,
+      });
+
+      const result = await request.promptAsync(discovery);
+
+      if (result.type === 'success' && result.params.id_token) {
+        await loginWithGoogle(result.params.id_token);
+      } else if (result.type === 'error') {
+        setErrorMessage(result.error?.message || 'Google sign-in failed');
+      }
+    } catch (err: any) {
+      console.error('Google Sign-In error:', err);
+      setErrorMessage(err?.message || 'Google sign-in encountered an error.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     const trimmedEmail = email.trim();
@@ -143,13 +218,37 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             <TouchableOpacity
               style={[styles.loginBtn, loading && styles.disabledBtn]}
               onPress={handleLogin}
-              disabled={loading}
+              disabled={loading || googleLoading}
               activeOpacity={0.8}
             >
               {loading ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
                 <Text style={styles.loginBtnText}>Sign In</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* OR Divider */}
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Sign-In Button */}
+            <TouchableOpacity
+              style={[styles.googleBtn, googleLoading && styles.disabledBtn]}
+              onPress={handleGoogleSignIn}
+              disabled={loading || googleLoading}
+              activeOpacity={0.8}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color={COLORS.textDark} />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={18} color="#EA4335" style={styles.googleIcon} />
+                  <Text style={styles.googleBtnText}>Sign in with Google</Text>
+                </>
               )}
             </TouchableOpacity>
 
@@ -287,6 +386,45 @@ const styles = StyleSheet.create({
   loginBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
+    fontWeight: '700',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 18,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.borderLight,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    height: 48,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  googleIcon: {
+    marginRight: 10,
+  },
+  googleBtnText: {
+    color: COLORS.textDark,
+    fontSize: 14,
     fontWeight: '700',
   },
   footerLink: {
